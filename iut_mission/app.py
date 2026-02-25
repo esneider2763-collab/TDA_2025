@@ -7,16 +7,16 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="IUT-RC: Evaluación TDA", layout="centered")
 
-# --- 2. CARGA DE PREGUNTAS ---
+# --- 2. CARGA DE PREGUNTAS (EL MOTOR) ---
 @st.cache_data
 def cargar_banco():
-    # Intenta leer el CSV en la misma carpeta
+    # Intenta leer el CSV en las rutas posibles
     if os.path.exists("iut_mission/preguntas_tda.csv"):
         return pd.read_csv("iut_mission/preguntas_tda.csv")
     elif os.path.exists("preguntas_tda.csv"):
         return pd.read_csv("preguntas_tda.csv")
     else:
-        # Banco de auxilio por si el CSV no carga
+        # Banco de auxilio (Safe Mode)
         data = {
             'pregunta': ["¿Estándar TDA en Venezuela?", "¿Modulación TDA?", "¿Middleware?"],
             'a': ["DVB-T", "8-VSB", "Ginga"],
@@ -27,33 +27,14 @@ def cargar_banco():
         }
         return pd.DataFrame(data)
 
-for i, p in enumerate(st.session_state.preguntas_examen):
-            st.write(f"**{i+1}. {p['pregunta']}**")
-            opciones = [p['a'], p['b'], p['c'], p['d']]
-            
-            # --- CAMBIO AQUÍ: index=None para que aparezca vacío ---
-            resp = st.radio(
-                f"Seleccione su respuesta (Q{i+1}):", 
-                opciones, 
-                key=f"q{i}", 
-                index=None
-            )
-            
-            # Validamos si respondió algo para no dar error de índice
-            if resp:
-                letra_resp = chr(97 + opciones.index(resp))
-                respuestas_usuario.append(letra_resp)
-            else:
-                respuestas_usuario.append(None) # Si no marca nada, queda vacío
-
-# --- 3. LÓGICA DE EXAMEN ---
+# --- 3. INTERFAZ Y LÓGICA DE EXAMEN ---
 st.title("📡 IUT-RC: TV Universitaria Interactiva")
 st.markdown("### Evaluación de Televisión Digital Abierta")
 
 try:
     df_preguntas = cargar_banco()
     
-    # Seleccionamos 5 al azar y las guardamos en la sesión
+    # Seleccionamos 5 al azar (solo una vez por sesión)
     if 'preguntas_examen' not in st.session_state:
         st.session_state.preguntas_examen = df_preguntas.sample(min(5, len(df_preguntas))).to_dict('records')
 
@@ -63,25 +44,38 @@ try:
         
         st.divider()
         
+        # DIBUJAMOS LAS PREGUNTAS
         for i, p in enumerate(st.session_state.preguntas_examen):
             st.write(f"**{i+1}. {p['pregunta']}**")
             opciones = [p['a'], p['b'], p['c'], p['d']]
-            resp = st.radio(f"Seleccione su respuesta (Q{i+1}):", opciones, key=f"q{i}")
             
-            # Convertimos la opción seleccionada a letra (a, b, c, d)
-            letra_resp = chr(97 + opciones.index(resp))
-            respuestas_usuario.append(letra_resp)
+            # EL FAMOSO INDEX=NONE
+            resp = st.radio(
+                f"Seleccione su respuesta (Q{i+1}):", 
+                opciones, 
+                key=f"q{i}", 
+                index=None
+            )
+            
+            # Guardamos la letra seleccionada o None
+            if resp:
+                letra_resp = chr(97 + opciones.index(resp))
+                respuestas_usuario.append(letra_resp)
+            else:
+                respuestas_usuario.append(None)
 
         enviar = st.form_submit_button("Finalizar y Enviar Evaluación")
 
         if enviar:
             if not cedula:
                 st.error("⚠️ La cédula es obligatoria para registrar la nota.")
+            elif None in respuestas_usuario:
+                st.warning("⚠️ Por favor, responda todas las preguntas antes de enviar.")
             else:
                 nota = 0
                 for i, p in enumerate(st.session_state.preguntas_examen):
                     if respuestas_usuario[i] == p['correcta']:
-                        nota += 4 # 5 preguntas x 4 pts = 20
+                        nota += 4 
                 
                 st.metric("CALIFICACIÓN", f"{nota}/20")
                 
